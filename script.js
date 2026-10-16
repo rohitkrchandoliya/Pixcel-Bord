@@ -2,75 +2,98 @@ const grid = document.getElementById('pixelGrid');
 const gridContainer = document.getElementById('gridContainer');
 const rows = 120;
 const cols = 120;
+const EXPORT_PIXEL_SIZE = 10;
 let currentColor = 'black';
 let isDrawing = false;
 let zoomScale = 1;
 
-// Create the grid
-function createGrid() {
-    grid.innerHTML = '';
-    for (let i = 0; i < rows * cols; i++) {
-        const pixel = document.createElement('div');
-        pixel.classList.add('pixel');
-        pixel.addEventListener('mousedown', () => isDrawing = true);
-        pixel.addEventListener('mouseup', () => isDrawing = false);
-        pixel.addEventListener('mouseover', (e) => {
-            if (isDrawing) e.target.style.backgroundColor = currentColor;
-        });
-        pixel.addEventListener('click', (e) => {
-            e.target.style.backgroundColor = currentColor;
-        });
-        grid.appendChild(pixel);
+function paintPixel(pixel) {
+    if (pixel && pixel.classList.contains('pixel')) {
+        pixel.style.backgroundColor = currentColor;
     }
 }
 
-// Change the color
+function createGrid() {
+    grid.replaceChildren();
+    const fragment = document.createDocumentFragment();
+
+    for (let i = 0; i < rows * cols; i++) {
+        const pixel = document.createElement('div');
+        pixel.classList.add('pixel');
+        pixel.addEventListener('pointerdown', event => {
+            if (event.button !== 0 && event.pointerType === 'mouse') return;
+            isDrawing = true;
+            paintPixel(event.currentTarget);
+            event.preventDefault();
+        });
+        pixel.addEventListener('pointerenter', event => {
+            if (isDrawing) paintPixel(event.currentTarget);
+        });
+        pixel.addEventListener('click', event => {
+            // A click also supports keyboard and tap activation.
+            paintPixel(event.currentTarget);
+        });
+        fragment.appendChild(pixel);
+    }
+
+    grid.appendChild(fragment);
+}
+
 function changeColor(color) {
     currentColor = color;
 }
 
-// Clear the grid
 function clearGrid() {
-    document.querySelectorAll('.pixel').forEach(pixel => pixel.style.backgroundColor = '#fff');
+    grid.querySelectorAll('.pixel').forEach(pixel => {
+        pixel.style.backgroundColor = '#fff';
+    });
+    isDrawing = false;
 }
 
-// Download the art as an image
 function downloadImage() {
+    const pixels = grid.querySelectorAll('.pixel');
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    const pixels = document.querySelectorAll('.pixel');
+    if (!ctx) {
+        alert('Could not create an image in this browser.');
+        return;
+    }
 
-    // Set canvas size based on the grid dimensions
-    canvas.width = cols * 40;
-    canvas.height = rows * 40;
+    // Export at 1200x1200 instead of allocating a 4800x4800 canvas.
+    canvas.width = cols * EXPORT_PIXEL_SIZE;
+    canvas.height = rows * EXPORT_PIXEL_SIZE;
 
-    // Draw each pixel on the canvas
     pixels.forEach((pixel, index) => {
-        const x = (index % cols) * 40;
-        const y = Math.floor(index / cols) * 40;
+        const x = (index % cols) * EXPORT_PIXEL_SIZE;
+        const y = Math.floor(index / cols) * EXPORT_PIXEL_SIZE;
         ctx.fillStyle = pixel.style.backgroundColor || '#fff';
-        ctx.fillRect(x, y, 40, 40);
+        ctx.fillRect(x, y, EXPORT_PIXEL_SIZE, EXPORT_PIXEL_SIZE);
     });
 
-    // Trigger download
-    const link = document.createElement('a');
-    link.download = 'pixel-art.png';
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+    try {
+        const link = document.createElement('a');
+        link.download = 'pixel-art.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    } catch (error) {
+        alert('Could not export the pixel art image.');
+        console.error(error);
+    }
 }
 
-// Zoom functionality
-gridContainer.addEventListener('wheel', (event) => {
+gridContainer.addEventListener('wheel', event => {
     event.preventDefault();
     const zoomAmount = 0.1;
     zoomScale += event.deltaY < 0 ? zoomAmount : -zoomAmount;
-    zoomScale = Math.min(Math.max(zoomScale, 0.5), 3); // Limit zoom between 0.5x and 3x
-    grid.style.transform = `scale(${zoomScale})`;
+    zoomScale = Math.min(Math.max(zoomScale, 0.5), 3);
+    grid.style.transform = 'scale(' + zoomScale + ')';
+}, { passive: false });
+
+window.addEventListener('pointerup', () => {
+    isDrawing = false;
+});
+window.addEventListener('pointercancel', () => {
+    isDrawing = false;
 });
 
-// Initialize the grid
 createGrid();
-
-// Detect mouse state globally for drawing
-document.body.addEventListener('mousedown', () => isDrawing = true);
-document.body.addEventListener('mouseup', () => isDrawing = false);
